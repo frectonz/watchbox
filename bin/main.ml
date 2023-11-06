@@ -1,1 +1,4 @@
-let () = print_endline "Hello, World!"
+open Nottui;;
+module W = Nottui_widgets;;
+
+Ui_loop.run (Lwd.pure (W.printf "Hello world"));;

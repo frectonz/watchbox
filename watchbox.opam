@@ -9,6 +9,7 @@ bug-reports: "https://github.com/frectonz/watchbox/issues"
 depends: [
   "ocaml"
   "dune" {>= "3.10"}
+  "nottui"
   "odoc" {with-doc}
 ]
 build: [

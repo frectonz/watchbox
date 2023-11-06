@@ -1,4 +1,4 @@
 (executable
  (public_name watchbox)
  (name main)
- (libraries watchbox))
+ (libraries watchbox nottui))

@@ -16,4 +16,4 @@
 (package
  (name watchbox)
  (synopsis "Personal for watching movies and shows")
- (depends ocaml dune))
+ (depends ocaml dune nottui))
