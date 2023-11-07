@@ -1,5 +1,6 @@
 open Nottui
 module W = Nottui_widgets
+module A = Notty.A
 
 let title =
   {|
@@ -40,7 +41,7 @@ let () =
     let path = Sys.argv.(1) in
     let () = Printf.printf "You provided the directory path: %s\n" path in
     let dirs_ui = dirs path |> ui_of_dirs in
-    let title_ui = W.printf "%s" title |> Lwd.var |> Lwd.get in
+    let title_ui = W.string ~attr:A.(fg blue ++ st bold) title |> Lwd.var |> Lwd.get in
     let ui = W.vbox [ title_ui; dirs_ui ] in
     Ui_loop.run ui ~quit_on_escape:true)
 ;;
