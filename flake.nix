@@ -37,7 +37,7 @@
 
         devShells.default = pkgs.mkShell {
           inputsFrom = [ main ];
-          buildInputs = devPackages ++ [ ];
+          buildInputs = devPackages ++ (with pkgs; [ just fzf ]);
         };
 
         formatter = pkgs.nixpkgs-fmt;
