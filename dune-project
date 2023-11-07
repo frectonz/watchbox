@@ -15,5 +15,5 @@
 
 (package
  (name watchbox)
- (synopsis "Personal for watching movies and shows")
+ (synopsis "My personal program for watching movies and shows")
  (depends ocaml dune nottui))
