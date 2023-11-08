@@ -2,6 +2,10 @@ open Nottui
 module W = Nottui_widgets
 module A = Notty.A
 
+type app = { show_idx : int }
+type dir = string
+type attrs = Notty.A.t option
+
 let title =
   {|
                              ___                ,---,                                    
@@ -20,25 +24,26 @@ let title =
 |}
 ;;
 
-type app = { show_idx : int }
-
-let dirs dir =
-  Sys.readdir dir
+let dirs (path : dir) : dir list =
+  path
+  |> Sys.readdir
   |> Array.to_list
   |> List.filter (fun entry -> entry <> "." && entry <> "..")
-  |> List.filter (fun entry -> Sys.is_directory (dir ^ "/" ^ entry))
+  |> List.filter (fun entry -> Sys.is_directory (path ^ "/" ^ entry))
 ;;
 
-let ui_of_dirs app dirs =
-  dirs
-  |> List.mapi (fun i dir ->
-    let app = Lwd.get app in
-    let attr =
-      Lwd.map app ~f:(fun a ->
-        if a.show_idx = i then Some A.(fg blue ++ st bold) else None)
-    in
-    Lwd.map attr ~f:(fun attr -> W.printf ?attr "[%s]" dir))
-  |> W.vlist ~bullet:"* "
+let attr_of_dir (i : int) ({ show_idx } : app) : attrs =
+  if show_idx = i then Some A.(fg blue ++ st bold) else None
+;;
+
+let ui_of_dir (app : app Lwd.t) (i : int) (dir : dir) : Nottui.ui Lwd.t =
+  let attr = Lwd.map app ~f:(attr_of_dir i) in
+  Lwd.map attr ~f:(fun attr -> W.printf ?attr "[%s]" dir)
+;;
+
+let ui_of_dirs (app : app Lwd.var) (dirs : dir list) : Nottui.ui Lwd.t =
+  let app = Lwd.get app in
+  dirs |> List.mapi (ui_of_dir app) |> W.vlist ~bullet:"* "
 ;;
 
 let () =
@@ -58,23 +63,19 @@ let () =
         Ui.keyboard_area
           (function
             | `Arrow `Up, _ ->
-              let got = Lwd.peek app in
-              let new_idx = if got.show_idx = 0 then 0 else got.show_idx - 1 in
+              let { show_idx } = Lwd.peek app in
+              let new_idx = max 0 (show_idx - 1) in
               let new_app = { show_idx = new_idx } in
-              let () = Lwd.set app new_app in
+              Lwd.set app new_app;
               `Handled
             | `Arrow `Down, _ ->
-              let got = Lwd.peek app in
-              let new_idx =
-                if got.show_idx + 1 = List.length dirs_lst
-                then List.length dirs_lst - 1
-                else got.show_idx + 1
-              in
+              let { show_idx } = Lwd.peek app in
+              let new_idx = min (List.length dirs_lst - 1) (show_idx + 1) in
               let new_app = { show_idx = new_idx } in
-              let () = Lwd.set app new_app in
+              Lwd.set app new_app;
               `Handled
             | `ASCII 'q', _ ->
-              let () = Lwd.set quit_with_q true in
+              Lwd.set quit_with_q true;
               `Handled
             | _ -> `Unhandled)
           ui)
