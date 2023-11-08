@@ -33,7 +33,10 @@ let ui_of_dirs app dirs =
   dirs
   |> List.mapi (fun i dir ->
     let app = Lwd.get app in
-    let attr = Lwd.map app ~f:(fun a -> if a.show_idx = i then Some A.(fg blue ++ st bold) else None) in
+    let attr =
+      Lwd.map app ~f:(fun a ->
+        if a.show_idx = i then Some A.(fg blue ++ st bold) else None)
+    in
     Lwd.map attr ~f:(fun attr -> W.printf ?attr "[%s]" dir))
   |> W.vlist ~bullet:"* "
 ;;
@@ -49,6 +52,7 @@ let () =
     let dirs_ui = ui_of_dirs app dirs_lst in
     let title_ui = W.string ~attr:A.(fg blue ++ st bold) title |> Lwd.var |> Lwd.get in
     let ui = W.vbox [ title_ui; dirs_ui ] in
+    let quit_with_q = Lwd.var false in
     let ui =
       Lwd.map ui ~f:(fun ui ->
         Ui.keyboard_area
@@ -59,15 +63,21 @@ let () =
               let new_app = { show_idx = new_idx } in
               let () = Lwd.set app new_app in
               `Handled
-
             | `Arrow `Down, _ ->
               let got = Lwd.peek app in
-              let new_idx = if got.show_idx + 1 = List.length dirs_lst then List.length dirs_lst - 1 else got.show_idx + 1 in
+              let new_idx =
+                if got.show_idx + 1 = List.length dirs_lst
+                then List.length dirs_lst - 1
+                else got.show_idx + 1
+              in
               let new_app = { show_idx = new_idx } in
               let () = Lwd.set app new_app in
+              `Handled
+            | `ASCII 'q', _ ->
+              let () = Lwd.set quit_with_q true in
               `Handled
             | _ -> `Unhandled)
           ui)
     in
-    Ui_loop.run ui ~quit_on_escape:true)
+    Ui_loop.run ui ~quit:quit_with_q ~quit_on_escape:true)
 ;;
