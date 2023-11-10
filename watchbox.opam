@@ -11,6 +11,7 @@ depends: [
   "dune" {>= "3.10"}
   "notty"
   "nottui"
+  "feather"
   "odoc" {with-doc}
 ]
 build: [

@@ -46,6 +46,13 @@ let ui_of_dirs (app : app Lwd.var) (dirs : dir list) : Nottui.ui Lwd.t =
   dirs |> List.mapi (ui_of_dir app) |> W.vlist ~bullet:"* "
 ;;
 
+let open_random_vid path = Feather.process "mpv" [ path; "--shuffle" ]
+let second (_, y) = y
+
+let list_get (i : int) (lst : 'a list) =
+  lst |> List.mapi (fun i d -> i, d) |> List.find (fun (idx, _) -> i = idx) |> second
+;;
+
 let () =
   if Array.length Sys.argv <> 2
   then print_endline "Usage: <path_to_directory>"
@@ -76,6 +83,11 @@ let () =
               `Handled
             | `ASCII 'q', _ ->
               Lwd.set quit_with_q true;
+              `Handled
+            | `Enter, _ ->
+              let { show_idx } = Lwd.peek app in
+              let cmd = open_random_vid (dirs_lst |> list_get show_idx |> ( ^ ) path) in
+              Feather.run cmd;
               `Handled
             | _ -> `Unhandled)
           ui)
