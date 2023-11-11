@@ -37,8 +37,8 @@ let attr_of_dir (i : int) ({ show_idx } : app) : attrs =
 ;;
 
 let ui_of_dir (app : app Lwd.t) (i : int) (dir : dir) : Nottui.ui Lwd.t =
-  let attr = Lwd.map app ~f:(attr_of_dir i) in
-  Lwd.map attr ~f:(fun attr -> W.printf ?attr "[%s]" dir)
+  let attr = app |> Lwd.map ~f:(attr_of_dir i) in
+  attr |> Lwd.map ~f:(fun attr -> W.printf ?attr "[%s]" dir)
 ;;
 
 let ui_of_dirs (app : app Lwd.var) (dirs : dir list) : Nottui.ui Lwd.t =
@@ -62,11 +62,26 @@ let () =
     let () = Printf.printf "You provided the directory path: %s\n" path in
     let dirs_lst = dirs path in
     let dirs_ui = ui_of_dirs app dirs_lst in
-    let title_ui = W.string ~attr:A.(fg blue ++ st bold) title |> Lwd.var |> Lwd.get in
-    let ui = W.vbox [ title_ui; dirs_ui ] in
+    let title_ui = W.string ~attr:A.(fg blue ++ st bold) title |> Lwd.return in
+    let help =
+      W.vbox
+        [ W.string ~attr:A.(fg blue) "(q) quit" |> Lwd.return
+        ; W.string ~attr:A.(fg blue) "(enter) open random episode" |> Lwd.return
+        ]
+    in
+    let ui =
+      W.vbox
+        [ title_ui
+        ; Ui.space 0 5 |> Lwd.return
+        ; dirs_ui
+        ; Ui.space 0 5 |> Lwd.return
+        ; help
+        ]
+    in
     let quit_with_q = Lwd.var false in
     let ui =
-      Lwd.map ui ~f:(fun ui ->
+      ui
+      |> Lwd.map ~f:(fun ui ->
         Ui.keyboard_area
           (function
             | `Arrow `Up, _ ->
