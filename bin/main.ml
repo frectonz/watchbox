@@ -47,8 +47,9 @@ let ui_of_dirs (app : app Lwd.var) (dirs : dir list) : Nottui.ui Lwd.t =
 ;;
 
 let open_random_vid path = Feather.process "mpv" [ path; "--shuffle" ]
-let second (_, y) = y
+let open_from_start_vid path = Feather.process "mpv" [ path ]
 
+let second (_, y) = y
 let list_get (i : int) (lst : 'a list) =
   lst |> List.mapi (fun i d -> i, d) |> List.find (fun (idx, _) -> i = idx) |> second
 ;;
@@ -66,6 +67,7 @@ let () =
     let help =
       W.vbox
         [ W.string ~attr:A.(fg blue) "(q) quit" |> Lwd.return
+        ; W.string ~attr:A.(fg blue) "(s) open episode from the start" |> Lwd.return
         ; W.string ~attr:A.(fg blue) "(enter) open random episode" |> Lwd.return
         ]
     in
@@ -102,6 +104,11 @@ let () =
             | `Enter, _ ->
               let { show_idx } = Lwd.peek app in
               let cmd = open_random_vid (dirs_lst |> list_get show_idx |> ( ^ ) path) in
+              Feather.run cmd;
+              `Handled
+            | `ASCII 's', _ ->
+              let { show_idx } = Lwd.peek app in
+              let cmd = open_from_start_vid (dirs_lst |> list_get show_idx |> ( ^ ) path) in
               Feather.run cmd;
               `Handled
             | _ -> `Unhandled)
