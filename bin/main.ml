@@ -57,6 +57,15 @@ let remove_char str =
 
 let add_char ch str = str ^ String.make 1 ch
 
+let contains s1 s2 =
+  let re = Str.regexp_string s2 in
+  try
+    ignore (Str.search_forward re s1 0);
+    true
+  with
+  | Not_found -> false
+;;
+
 let () =
   if Array.length Sys.argv <> 2
   then print_endline "Usage: <path_to_directory>"
@@ -73,13 +82,22 @@ let () =
     let path = Sys.argv.(1) in
     let () = Printf.printf "You provided the directory path: %s\n" path in
     let dirs_lst = dirs path |> Lwd.return in
-    let dirs_ui =
-      ui_of_dirs
-        app
-        (dirs_lst
-         |> Lwd.map ~f:(fun lst ->
-           lst |> List.filter (fun dir -> Some dir = (search_input |> Lwd.peek))))
+    let filted_dirs =
+      Lwd.map2 dirs_lst (Lwd.get search_input) ~f:(fun lst search ->
+        lst
+        |> List.filter (fun dir ->
+          match search with
+          | None -> true
+          | Some s -> contains (String.lowercase_ascii dir) (String.lowercase_ascii s)))
     in
+    let gap =
+      Lwd.map2
+        (Lwd.map dirs_lst ~f:List.length)
+        (Lwd.map filted_dirs ~f:List.length)
+        ~f:( - )
+      |> Lwd.map ~f:(Ui.space 0)
+    in
+    let dirs_ui = ui_of_dirs app filted_dirs in
     let title_ui = W.string ~attr:A.(fg blue ++ st bold) title |> Lwd.return in
     let help =
       W.vbox
@@ -92,11 +110,12 @@ let () =
     let ui =
       W.vbox
         [ title_ui
-        ; Ui.space 0 5 |> Lwd.return
+        ; Ui.space 0 1 |> Lwd.return
         ; dirs_ui |> Lwd.join
-        ; Ui.space 0 5 |> Lwd.return
+        ; gap
+        ; Ui.space 0 1 |> Lwd.return
         ; help
-        ; Ui.space 0 2 |> Lwd.return
+        ; Ui.space 0 1 |> Lwd.return
         ; search
         ]
     in

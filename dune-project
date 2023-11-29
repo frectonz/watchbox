@@ -16,4 +16,4 @@
 (package
  (name watchbox)
  (synopsis "My personal program for watching movies and shows")
- (depends ocaml dune notty nottui feather))
+ (depends ocaml dune notty nottui feather utop))

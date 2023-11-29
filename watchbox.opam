@@ -12,6 +12,7 @@ depends: [
   "notty"
   "nottui"
   "feather"
+  "utop"
   "odoc" {with-doc}
 ]
 build: [
