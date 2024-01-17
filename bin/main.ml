@@ -2,10 +2,54 @@ open Nottui
 module W = Nottui_widgets
 module A = Notty.A
 
-type app = { show_idx : int }
+module List = struct
+  include List
 
-let title =
-  {|
+  let first = function
+    | [] -> None
+    | x :: _ -> Some x
+  ;;
+
+  let rec last = function
+    | [] -> None
+    | [ x ] -> Some x
+    | _ :: rest -> last rest
+  ;;
+end
+
+module Helpers = struct
+  let dirs path =
+    path
+    |> Sys.readdir
+    |> Array.to_list
+    |> List.filter (fun entry -> entry <> "." && entry <> "..")
+    |> List.filter (fun entry -> Sys.is_directory (path ^ "/" ^ entry))
+  ;;
+
+  let contains term =
+    let contains' s1 s2 =
+      let re = Str.regexp_string s2 in
+      try
+        ignore (Str.search_forward re s1 0);
+        true
+      with
+      | Not_found -> false
+    in
+    List.filter (contains' term)
+  ;;
+
+  let equal s1 s2 =
+    String.equal (s1 |> String.lowercase_ascii) (s2 |> String.lowercase_ascii)
+  ;;
+
+  let add_char ch str = str ^ String.make 1 ch
+
+  let remove_last_char str =
+    if String.length str > 0 then String.sub str 0 (String.length str - 1) else str
+  ;;
+
+  let title =
+    {|
                                ___                ,---,                                    
                              ,--.'|_            ,--.' |      ,---,                         
            .---.             |  | :,'           |  |  :    ,---.'|      ,---.              
@@ -20,161 +64,227 @@ let title =
      \   \ |   |  ,     .-./  ---`-'   \   \  / `--''      /    \  /          `---'  `--`  
       '---"     `--`---'                `----'             `-'----'                        
 |}
-;;
+  ;;
+end
 
-let dirs path =
-  path
-  |> Sys.readdir
-  |> Array.to_list
-  |> List.filter (fun entry -> entry <> "." && entry <> "..")
-  |> List.filter (fun entry -> Sys.is_directory (path ^ "/" ^ entry))
-;;
+module App = struct
+  type app =
+    { path : string
+    ; dirs : string list
+    ; selected : string option
+    ; search_term : string option
+    }
 
-let attr_of_dir i app = if app.show_idx = i then Some A.(fg blue ++ st bold) else None
+  let make path =
+    let dirs = Helpers.dirs path in
+    match dirs with
+    | [] -> Error "directory is empty"
+    | hd :: _ -> Ok ({ path; dirs; selected = Some hd; search_term = None } |> Lwd.var)
+  ;;
 
-let ui_of_dir app i dir =
-  let attr = app |> Lwd.map ~f:(attr_of_dir i) in
-  attr |> Lwd.map ~f:(fun attr -> W.printf ?attr "[%s]" dir)
-;;
+  let search app =
+    app
+    |> Lwd.get
+    |> Lwd.map ~f:(fun { search_term; _ } -> search_term)
+    |> Lwd.map ~f:(function
+      | Some s -> W.printf "search: %s" s
+      | None -> W.printf "")
+  ;;
 
-let ui_of_dirs app dirs =
-  let app = Lwd.get app in
-  dirs
-  |> Lwd.map ~f:(fun lst -> lst |> List.mapi (ui_of_dir app) |> W.vlist ~bullet:" * ")
-;;
+  let dirs app =
+    app
+    |> Lwd.get
+    |> Lwd.map ~f:(fun { dirs; search_term; selected; _ } -> dirs, search_term, selected)
+    |> Lwd.map ~f:(fun (dirs, search_term, selected) ->
+      match search_term with
+      | Some search -> Helpers.contains search dirs, selected
+      | None -> dirs, selected)
+    |> Lwd.map ~f:(fun (dirs, selected) ->
+      List.map
+        (fun dir ->
+          if selected |> Option.map (Helpers.equal dir) |> Option.value ~default:false
+          then Some A.(fg blue ++ st bold), dir
+          else None, dir)
+        dirs)
+    |> Lwd.map ~f:(List.map (fun (attr, dir) -> W.printf ?attr "[%s]" dir))
+    |> Lwd.map ~f:(List.map Lwd.return)
+    |> Lwd.map ~f:(W.vlist ~bullet:" * ")
+    |> Lwd.join
+  ;;
 
-let open_random_vid path = Feather.process "mpv" [ path; "--shuffle" ]
-let open_from_start_vid path = Feather.process "mpv" [ path ]
-let second (_, y) = y
+  let title = Helpers.title |> W.string ~attr:A.(fg blue ++ st bold) |> Lwd.return
 
-let list_get (i : int) (lst : 'a list) =
-  lst |> List.mapi (fun i d -> i, d) |> List.find (fun (idx, _) -> i = idx) |> second
-;;
+  let help =
+    W.vbox
+      [ W.string ~attr:A.(fg blue) "(q) quit" |> Lwd.return
+      ; W.string ~attr:A.(fg blue) "(s) open episode from the start" |> Lwd.return
+      ; W.string ~attr:A.(fg blue) "(enter) open random episode" |> Lwd.return
+      ; W.string ~attr:A.(fg blue) "(/) to search" |> Lwd.return
+      ]
+  ;;
 
-let remove_char str =
-  if String.length str > 0 then String.sub str 0 (String.length str - 1) else str
-;;
+  let gap app =
+    app
+    |> Lwd.get
+    |> Lwd.map ~f:(fun { dirs; search_term; _ } ->
+      ( List.length dirs
+      , match search_term with
+        | Some search -> Helpers.contains search dirs |> List.length
+        | None -> 0 ))
+    |> Lwd.map ~f:(fun (all, filtered) -> all - filtered)
+    |> Lwd.map ~f:(Ui.space 0)
+  ;;
 
-let add_char ch str = str ^ String.make 1 ch
+  let render app =
+    W.vbox
+      [ title
+      ; Ui.space 0 1 |> Lwd.return
+      ; dirs app
+      ; gap app
+      ; Ui.space 0 1 |> Lwd.return
+      ; help
+      ; Ui.space 0 1 |> Lwd.return
+      ; search app
+      ]
+  ;;
 
-let contains s1 s2 =
-  let re = Str.regexp_string s2 in
-  try
-    ignore (Str.search_forward re s1 0);
-    true
-  with
-  | Not_found -> false
-;;
+  let move_up app =
+    let a = Lwd.peek app in
+    let a =
+      { a with
+        dirs =
+          a.search_term
+          |> Option.map (fun search -> Helpers.contains search a.dirs)
+          |> Option.value ~default:a.dirs
+      }
+    in
+    let pos =
+      Option.bind a.selected (fun s -> List.find_index (Helpers.equal s) a.dirs)
+    in
+    let new_app =
+      { a with
+        selected =
+          (match pos with
+           | Some 0 -> List.last a.dirs
+           | Some x -> List.nth_opt a.dirs (x - 1)
+           | None -> List.first a.dirs)
+      }
+    in
+    Lwd.set app new_app
+  ;;
+
+  let move_down app =
+    let a = Lwd.peek app in
+    let a =
+      { a with
+        dirs =
+          a.search_term
+          |> Option.map (fun search -> Helpers.contains search a.dirs)
+          |> Option.value ~default:a.dirs
+      }
+    in
+    let pos =
+      Option.bind a.selected (fun s -> List.find_index (Helpers.equal s) a.dirs)
+    in
+    let new_app =
+      { a with
+        selected =
+          (match pos with
+           | Some x when x = List.length a.dirs - 1 -> List.first a.dirs
+           | Some x -> List.nth_opt a.dirs (x + 1)
+           | None -> List.first a.dirs)
+      }
+    in
+    Lwd.set app new_app
+  ;;
+
+  let open_random app =
+    let app = Lwd.peek app in
+    let path = app.selected |> Option.map (fun selected -> app.path ^ selected) in
+    match path with
+    | Some path -> Feather.process "mpv" [ path; "--shuffle" ] |> Feather.run
+    | None -> ()
+  ;;
+
+  let open_from_start app =
+    let app = Lwd.peek app in
+    let path = app.selected |> Option.map (fun selected -> app.path ^ selected) in
+    match path with
+    | Some path -> Feather.process "mpv" [ path ] |> Feather.run
+    | None -> ()
+  ;;
+
+  let enable_search app =
+    let a = Lwd.peek app in
+    let new_app = { a with search_term = Some "" } in
+    Lwd.set app new_app
+  ;;
+
+  let disable_search app =
+    let a = Lwd.peek app in
+    let new_app = { a with search_term = None } in
+    Lwd.set app new_app
+  ;;
+
+  let add_char_to_search_term app char =
+    let a = Lwd.peek app in
+    let new_app =
+      { a with search_term = a.search_term |> Option.map (Helpers.add_char char) }
+    in
+    Lwd.set app new_app
+  ;;
+
+  let remove_char_from_search_term app =
+    let a = Lwd.peek app in
+    let new_app =
+      { a with search_term = a.search_term |> Option.map Helpers.remove_last_char }
+    in
+    Lwd.set app new_app
+  ;;
+
+  let with_actions app =
+    let quit_with_q = Lwd.var false in
+    let action_handler = function
+      | `Arrow `Up, _ ->
+        move_up app;
+        `Handled
+      | `Arrow `Down, _ ->
+        move_down app;
+        `Handled
+      | `Enter, _ ->
+        open_random app;
+        `Handled
+      | `ASCII 's', _ ->
+        open_from_start app;
+        `Handled
+      | `ASCII '/', _ ->
+        enable_search app;
+        `Handled
+      | `Escape, _ ->
+        disable_search app;
+        `Handled
+      | `ASCII 'q', _ ->
+        Lwd.set quit_with_q true;
+        `Handled
+      | `Backspace, _ ->
+        remove_char_from_search_term app;
+        `Handled
+      | `ASCII ch, _ ->
+        add_char_to_search_term app ch;
+        `Handled
+      | _ -> `Unhandled
+    in
+    let ui = render app |> Lwd.map ~f:(fun ui -> Ui.keyboard_area action_handler ui) in
+    Ui_loop.run ui ~quit:quit_with_q ~quit_on_escape:false
+  ;;
+end
 
 let () =
   if Array.length Sys.argv <> 2
   then print_endline "Usage: <path_to_directory>"
   else (
-    let search_input = Lwd.var None in
-    let search =
-      search_input
-      |> Lwd.get
-      |> Lwd.map ~f:(function
-        | Some s -> W.printf "search: %s" s
-        | None -> W.printf "")
-    in
-    let app = Lwd.var { show_idx = 0 } in
     let path = Sys.argv.(1) in
-    let () = Printf.printf "You provided the directory path: %s\n" path in
-    let dirs_lst = dirs path |> Lwd.return in
-    let filted_dirs =
-      Lwd.map2 dirs_lst (Lwd.get search_input) ~f:(fun lst search ->
-        lst
-        |> List.filter (fun dir ->
-          match search with
-          | None -> true
-          | Some s -> contains (String.lowercase_ascii dir) (String.lowercase_ascii s)))
-    in
-    let gap =
-      Lwd.map2
-        (Lwd.map dirs_lst ~f:List.length)
-        (Lwd.map filted_dirs ~f:List.length)
-        ~f:( - )
-      |> Lwd.map ~f:(Ui.space 0)
-    in
-    let dirs_ui = ui_of_dirs app filted_dirs in
-    let title_ui = W.string ~attr:A.(fg blue ++ st bold) title |> Lwd.return in
-    let help =
-      W.vbox
-        [ W.string ~attr:A.(fg blue) "(q) quit" |> Lwd.return
-        ; W.string ~attr:A.(fg blue) "(s) open episode from the start" |> Lwd.return
-        ; W.string ~attr:A.(fg blue) "(enter) open random episode" |> Lwd.return
-        ; W.string ~attr:A.(fg blue) "(/) to search" |> Lwd.return
-        ]
-    in
-    let ui =
-      W.vbox
-        [ title_ui
-        ; Ui.space 0 1 |> Lwd.return
-        ; dirs_ui |> Lwd.join
-        ; gap
-        ; Ui.space 0 1 |> Lwd.return
-        ; help
-        ; Ui.space 0 1 |> Lwd.return
-        ; search
-        ]
-    in
-    let quit_with_q = Lwd.var false in
-    let ui =
-      ui
-      |> Lwd.map ~f:(fun ui ->
-        Ui.keyboard_area
-          (function
-            | `Arrow `Up, _ ->
-              let { show_idx } = Lwd.peek app in
-              let new_idx = max 0 (show_idx - 1) in
-              let new_app = { show_idx = new_idx } in
-              Lwd.set app new_app;
-              `Handled
-            | `Arrow `Down, _ ->
-              let { show_idx } = Lwd.peek app in
-              let new_idx =
-                Lwd.map dirs_lst ~f:(fun dirs_lst ->
-                  min (List.length dirs_lst - 1) (show_idx + 1))
-              in
-              let _ =
-                Lwd.map new_idx ~f:(fun new_idx -> Lwd.set app { show_idx = new_idx })
-              in
-              `Handled
-            | `Enter, _ ->
-              let { show_idx } = Lwd.peek app in
-              let cmd =
-                Lwd.map dirs_lst ~f:(fun dirs_lst ->
-                  open_random_vid (dirs_lst |> list_get show_idx |> ( ^ ) path))
-              in
-              let _ = Lwd.map cmd ~f:Feather.run in
-              `Handled
-            | `ASCII 'q', _ ->
-              Lwd.set quit_with_q true;
-              `Handled
-            | `ASCII 's', _ ->
-              let { show_idx } = Lwd.peek app in
-              let cmd =
-                dirs_lst
-                |> Lwd.map ~f:(fun dirs_lst ->
-                  open_from_start_vid (dirs_lst |> list_get show_idx |> ( ^ ) path))
-              in
-              let _ = Lwd.map cmd ~f:Feather.run in
-              `Handled
-            | `ASCII '/', _ ->
-              Lwd.set search_input (Some "");
-              `Handled
-            | `Escape, _ ->
-              Lwd.set search_input None;
-              `Handled
-            | `Backspace, _ ->
-              search_input |> Lwd.peek |> Option.map remove_char |> Lwd.set search_input;
-              `Handled
-            | `ASCII ch, _ ->
-              search_input |> Lwd.peek |> Option.map (add_char ch) |> Lwd.set search_input;
-              `Handled
-            | _ -> `Unhandled)
-          ui)
-    in
-    Ui_loop.run ui ~quit:quit_with_q ~quit_on_escape:false)
+    match App.make path with
+    | Ok app -> App.with_actions app
+    | Error err -> print_endline err)
 ;;
