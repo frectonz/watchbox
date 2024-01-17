@@ -28,9 +28,11 @@ module Helpers = struct
 
   let contains term =
     let contains' s1 s2 =
-      let re = Str.regexp_string s2 in
+      let s1 = String.lowercase_ascii s1 in
+      let s2 = String.lowercase_ascii s2 in
+      let re = Str.regexp_string s1 in
       try
-        ignore (Str.search_forward re s1 0);
+        ignore (Str.search_forward re s2 0);
         true
       with
       | Not_found -> false
@@ -130,7 +132,7 @@ module App = struct
       ( List.length dirs
       , match search_term with
         | Some search -> Helpers.contains search dirs |> List.length
-        | None -> 0 ))
+        | None -> List.length dirs ))
     |> Lwd.map ~f:(fun (all, filtered) -> all - filtered)
     |> Lwd.map ~f:(Ui.space 0)
   ;;
@@ -231,6 +233,12 @@ module App = struct
     let new_app =
       { a with search_term = a.search_term |> Option.map (Helpers.add_char char) }
     in
+    let new_app =
+      match new_app.search_term with
+      | Some search ->
+        { new_app with selected = Helpers.contains search new_app.dirs |> List.first }
+      | None -> new_app
+    in
     Lwd.set app new_app
   ;;
 
@@ -238,6 +246,12 @@ module App = struct
     let a = Lwd.peek app in
     let new_app =
       { a with search_term = a.search_term |> Option.map Helpers.remove_last_char }
+    in
+    let new_app =
+      match new_app.search_term with
+      | Some search ->
+        { new_app with selected = Helpers.contains search new_app.dirs |> List.first }
+      | None -> new_app
     in
     Lwd.set app new_app
   ;;
